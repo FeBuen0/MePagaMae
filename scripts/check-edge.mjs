@@ -22,6 +22,9 @@ try{
  assert.deepEqual(validateSuggestions({items:[{index:0,merchant:'Uber',category:'Transporte',confidence:.95}]},1),[{index:0,merchant:'Uber',category:'Transporte',confidence:.95}]);
  assert.deepEqual(validateSuggestions({items:[{index:0,merchant:'Inventado',category:'Alimentação',confidence:.5}]},1),[{index:0,merchant:'',category:'',confidence:.5}]);
  assert.equal(validateSuggestions({items:[{index:0,merchant:'',category:'Categoria inventada',confidence:1}]},1)[0].category,'');
+ assert.equal(validateSuggestions({items:[{index:0,merchant:'',category:'Outros',confidence:1}]},1)[0].category,'');
+ assert.equal(validateSuggestions({items:[{index:0,merchant:'',category:'Transporte',confidence:1.5}]},1)[0].category,'');
+ assert.equal(validateSuggestions({items:[{index:0,merchant:'',category:'Não identificado',confidence:1}]},1)[0].category,'');
  assert.throws(()=>validateSuggestions({items:[{index:0},{index:0}]},2));assert.throws(()=>validateSuggestions({items:[{index:3}]},2));
  assert.throws(()=>validateSuggestions({items:'invalid'},1));
  const invoke=(body,key=secret)=>handler(new Request('https://example.test',{method:'POST',headers:{'X-Family-Secret':key,'Content-Type':'application/json'},body:JSON.stringify(body)}));
@@ -54,5 +57,12 @@ try{
  allowPassword=false;const writes=profileUpdates.length;
  assert.equal((await invoke({op:'upgrade_email',access_token:'valid',email:'outro@exemplo.com',password:'test-only-password',name:'Pessoa'})).status,400);assert.equal(profileUpdates.length,writes);
  db.from=originalFrom;
- console.log('OK: autenticação obrigatória, identidade verificada, cadastro/login com e-mail, migração preservando a conta, senha atual obrigatória e sugestões de IA validadas.');
+ let submitted=null;
+ db.from=table=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{user_id:'verified-user',family_id:'family-test',role:'child'},error:null}),single:async()=>({data:{creator_id:'verified-user'},error:null})})})});
+ db.rpc=async(name,params)=>{if(name==='cec_submit_expenses')submitted=params;return {data:1,error:null}};
+ const item={description:'Pagamento de exemplo',amount:2010,date:'2026-11-23',category:'Outros',note:'Almoço na faculdade'};
+ let sent=await invoke({op:'submit',access_token:'valid',request_id:'11111111-1111-4111-8111-111111111111',items:[item]});
+ assert.equal(sent.status,200);assert.equal(submitted.p_items[0].note,'Almoço na faculdade');assert.equal(submitted.p_items[0].category,'Outros');
+ submitted=null;sent=await invoke({op:'submit',access_token:'valid',request_id:'11111111-1111-4111-8111-111111111111',items:[{...item,note:'x'.repeat(501)}]});assert.equal(sent.status,400);assert.equal(submitted,null);
+ console.log('OK: autenticação, acesso com e-mail, migração, categorias de IA, escolha manual de Outros e explicação enviada com o gasto.');
 }finally{globalThis.Deno=oldDeno;delete globalThis.__mepagamaeTestClient;await rm(directory,{recursive:true,force:true})}
