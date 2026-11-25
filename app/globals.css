@@ -29,3 +29,12 @@
 @media(max-width:600px){.auth-page{padding:40px 18px 24px}.auth-brand{margin-bottom:29px}.auth-card{padding:25px 22px;border-radius:18px}.onboarding{margin:45px auto}.family-ai{align-items:flex-start;flex-direction:column}.family-ai .button{width:100%}.modal input,.modal select,.modal textarea{font-size:16px}}
 
 fieldset.import-rows{padding:0;margin:0;min-width:0}
+
+/* Every editable import field has a visible label. */
+.modal .import-row label{display:flex;flex-direction:column;gap:5px;margin:0;font-size:10px;font-weight:400;color:#768470;min-width:0}
+.modal .import-row>label{align-self:start}.modal .import-row label input:not([type=checkbox]),.modal .import-row label select{margin:0}.modal .import-fields{gap:10px}
+@media(max-width:600px){.modal .import-row>.import-category{grid-column:2/-1}.modal .import-row label{font-size:11px}.modal .import-row input[type=date]{min-height:34px}}
+
+.modal .import-explanation{grid-column:2/-1;min-width:0}.modal .import-explanation summary{cursor:pointer;font-size:11px;color:#56714f;width:fit-content;padding:5px 0}.modal .import-explanation label{margin-top:9px}.modal .import-explanation textarea{min-height:72px;font-size:14px;margin:0}
+.expense-info>.expense-explanation{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#596b53;font-size:12px;line-height:1.45;margin-top:5px}
+@media(max-width:600px){.modal .import-explanation textarea{font-size:16px}.expense-info>.expense-explanation{font-size:11px}}
