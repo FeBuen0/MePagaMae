@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFile,mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createHash,randomBytes} from 'node:crypto';
+import ts from 'typescript';
+const directory=await mkdtemp(join(tmpdir(),'mepagamae-edge-'));
+const secret=randomBytes(32).toString('hex');
+let handler,lookedUp='',authenticated=false;
+const db={auth:{getUser:async token=>({data:{user:authenticated&&token==='valid'?{id:'verified-user',email:'verified@mepagamae.invalid',user_metadata:{name:'Pessoa'}}:null},error:authenticated?null:{message:'invalid'}})},from:()=>({select:()=>({eq:(_field,value)=>{lookedUp=value;return {maybeSingle:async()=>({data:null,error:null})}}})})};
+const oldDeno=globalThis.Deno;
+globalThis.Deno={env:{get:()=>''},serve:callback=>{handler=callback}};
+globalThis.__mepagamaeTestClient=()=>db;
+try{
+ let source=await readFile('supabase/functions/family-api/index.ts','utf8');
+ source=source.replace(/import \{createClient\} from 'npm:[^']+';/,'const createClient=globalThis.__mepagamaeTestClient;').replace(/const APP_SECRET_SHA256='[^']+';/,`const APP_SECRET_SHA256='${createHash('sha256').update(secret).digest('hex')}';`);
+ const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext},reportDiagnostics:true});
+ assert.equal(compiled.diagnostics?.filter(x=>x.category===ts.DiagnosticCategory.Error).length,0);
+ const target=join(directory,'edge.mjs');await writeFile(target,compiled.outputText);
+ const {validateSuggestions}=await import(pathToFileURL(target));
+ assert.deepEqual(validateSuggestions({items:[{index:0,merchant:'Uber',category:'Transporte',confidence:.95}]},1),[{index:0,merchant:'Uber',category:'Transporte',confidence:.95}]);
+ assert.deepEqual(validateSuggestions({items:[{index:0,merchant:'Inventado',category:'Alimentação',confidence:.5}]},1),[{index:0,merchant:'',category:'',confidence:.5}]);
+ assert.equal(validateSuggestions({items:[{index:0,merchant:'',category:'Categoria inventada',confidence:1}]},1)[0].category,'');
+ assert.throws(()=>validateSuggestions({items:[{index:0},{index:0}]},2));assert.throws(()=>validateSuggestions({items:[{index:3}]},2));
+ assert.throws(()=>validateSuggestions({items:'invalid'},1));
+ const invoke=(body,key=secret)=>handler(new Request('https://example.test',{method:'POST',headers:{'X-Family-Secret':key,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+ assert.equal((await invoke({op:'data'},'invalid')).status,401);
+ assert.equal((await invoke({op:'data',actor:{id:'forged-owner',email:'a@b.test'}})).status,401);
+ assert.equal((await invoke({op:'data',access_token:'invalid'})).status,401);
+ authenticated=true;const response=await invoke({op:'data',access_token:'valid',actor:{id:'forged-owner'}});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{data:null});assert.equal(lookedUp,'verified-user');
+ console.log('OK: autenticação obrigatória, identidade validada no Supabase, sugestões por índice, categorias válidas e dúvidas sem classificação inventada.');
+}finally{globalThis.Deno=oldDeno;delete globalThis.__mepagamaeTestClient;await rm(directory,{recursive:true,force:true})}
