@@ -22,3 +22,15 @@ export function amountCents(v:string):number {
  const n=Number(s);return Number.isFinite(n)?Math.round(n*100):0;
 }
 export function localDate(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+// "Outros" is a manual choice, never an automatic fallback for an unknown expense.
+export function aiCategory(value:unknown,confidence:unknown):Category|'' {
+ if(typeof confidence!=='number'||!Number.isFinite(confidence)||confidence<0.8||confidence>1||value==='Outros')return '';
+ return categories.includes(value as Category)?value as Category:'';
+}
+export function applyCategorySuggestion(current:{category:Category|'';guessed:boolean},suggestion:{category?:unknown;confidence?:unknown}){
+ const existing=current.category==='Outros'&&current.guessed?'':current.category;
+ if(existing)return {category:existing,guessed:current.guessed};
+ const category=aiCategory(suggestion.category,suggestion.confidence);
+ return {category,guessed:!!category};
+}
