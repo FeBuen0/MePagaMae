@@ -1,4 +1,5 @@
 import {env} from 'cloudflare:workers';
+import {aiCategory} from '../../../lib/model';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){
  const h={'Cache-Control':'no-store'};
@@ -15,6 +16,8 @@ export async function POST(req:Request){
   const client_id=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(FAMILY_API_SECRET+':'+ip)))).map(x=>x.toString(16).padStart(2,'0')).join('');
   const access_token=req.headers.get('authorization')?.replace(/^Bearer /i,'')||'';
   const result=await fetch(SUPABASE_EDGE_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Family-Secret':FAMILY_API_SECRET},body:JSON.stringify({...body,actor:undefined,access_token,client_id,bootstrap_key:body.op==='data'&&GEMINI_FAMILY_ID?GEMINI_API_KEY:undefined,bootstrap_family:body.op==='data'?GEMINI_FAMILY_ID:undefined}),signal:AbortSignal.timeout(45000)});
-  return Response.json(await result.json(),{status:result.status,headers:h});
+  const data=await result.json() as any;
+  if(body.op==='classify'&&result.ok&&Array.isArray(data.suggestions))data.suggestions=data.suggestions.map((item:any)=>({...item,category:aiCategory(item.category,item.confidence)}));
+  return Response.json(data,{status:result.status,headers:h});
  }catch{return Response.json({error:'Não foi possível conectar agora. Tente novamente.'},{status:502,headers:h});}
 }
