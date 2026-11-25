@@ -1,5 +1,5 @@
 import {amountCents,categorize,Category} from './model';
-export type Draft={description:string; amount:number; date:string; category:Category|''; include:boolean; guessed:boolean};
+export type Draft={description:string; merchant?:string; amount:number; date:string; category:Category|''; include:boolean; guessed:boolean};
 function dateValue(s:string,year:number):string|null {
  let m=s.trim().match(/^(\d{4})-?(\d{2})-?(\d{2})/);let y:number,mo:number,d:number;
  if(m){y=+m[1];mo=+m[2];d=+m[3];}else{m=s.trim().match(/^(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?/);if(!m)return null;y=m[3]?(+m[3]<100?2000+ +m[3]:+m[3]):year;mo=+m[2];d=+m[1];}
