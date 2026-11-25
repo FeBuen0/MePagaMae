@@ -1,5 +1,5 @@
 'use client';
-export type Account={id:string;name:string;username:string;email:string};
+export type Account={id:string;name:string;email:string};
 type Session={access_token:string;refresh_token:string;expires_at:number;user:Account};
 const storageKey='mepagamae.session.v1';
 let refreshing:Promise<Session>|null=null;
@@ -19,3 +19,5 @@ export async function request(op:string,payload:Record<string,unknown>={}){
  try{return await call(op,payload,s.access_token)}catch(e:any){if(e.status!==401)throw e;s=await renew();return call(op,payload,s.access_token)}
 }
 export async function signOut(){const s=session();save(null);if(s)await call('logout',{},s.access_token).catch(()=>{});}
+
+export async function completeEmailAccount(payload:Record<string,unknown>){const d=await request('upgrade_email',payload);save(d.session);return d.session as Session;}
