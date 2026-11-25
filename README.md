@@ -7,7 +7,7 @@ Controle de reembolsos da família. Interface simples para celular: os filhos en
 1. Crie uma conta com nome, e-mail e senha (mínimo de 8 caracteres).
 2. Crie a família como filho ou responsável. Em **Família → Adicionar pessoa**, gere um link e envie para a família.
 3. Cada convidado cria a própria conta. O convite dos filhos aceita até 10 pessoas; o convite do responsável, uma pessoa. Expiram em 7 dias. Há um responsável por família.
-4. Envie CSV, OFX ou PDF com texto selecionável, ou adicione um gasto. Confira valores, datas e categorias antes do envio.
+4. Envie CSV, OFX ou PDF com texto selecionável, ou adicione um gasto. Confira valores, datas e categorias antes do envio. Em cada gasto, **Adicionar explicação** permite contar para que ele foi; o responsável vê a explicação na lista e nos detalhes.
 5. O responsável aprova os gastos. Depois de transferir o dinheiro pelo banco, marca **Já paguei**.
 
 As senhas são gerenciadas pelo Supabase Auth. O nome identifica a pessoa para a família e o e-mail é usado para entrar. O cadastro é imediato, sem envio de confirmação por e-mail. O acesso aos gastos depende da conta autenticada e da participação na família, não do domínio ou da verificação do endereço. Recuperação por e-mail ainda não está disponível.
@@ -18,7 +18,7 @@ Contas antigas com identificador interno podem adicionar um e-mail usando a sess
 
 Em **Família → Ativar Gemini**, quem criou a família ou o responsável informa uma chave obtida no Google AI Studio. A chave é testada e guardada no Supabase Vault, criptografada e sem retorno ao navegador. Cada família usa sua própria chave.
 
-**Identificar com Gemini** envia somente as descrições. Sugere o estabelecimento e uma categoria; não altera valores, datas, autoria ou situação. A descrição original é preservada. Sugestões com confiança inferior a 0,8 deixam a categoria para a pessoa escolher. Toda importação exige revisão. PDF escaneado e OCR não estão incluídos.
+**Identificar com Gemini** envia somente as descrições. Sugere o estabelecimento e uma categoria; não altera valores, datas, autoria ou situação. A descrição original é preservada. Sugestões com confiança inferior a 0,8 ou sem identificação deixam a categoria em branco para a pessoa escolher. “Outros” nunca é atribuído automaticamente pelo Gemini e continua disponível como escolha manual. O envio exige completar as categorias dos gastos selecionados. Toda importação exige revisão. PDF escaneado e OCR não estão incluídos.
 
 Modelo: `gemini-3.5-flash-lite`, via Interactions API, revisão `2026-05-20`. Limite do aplicativo: 50 chamadas por família por dia, incluindo testes de chave. A API também tem quotas e cobrança próprias da conta Google. O site continua permitindo categorização manual se a API falhar.
 
