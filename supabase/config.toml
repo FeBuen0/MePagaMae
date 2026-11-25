@@ -1,0 +1,3 @@
+# This endpoint is authenticated by a server-only 256-bit secret. It never accepts browser identity.
+[functions.family-api]
+verify_jwt = false
