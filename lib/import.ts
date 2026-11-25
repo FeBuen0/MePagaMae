@@ -15,19 +15,49 @@ function splitCSV(text:string,sep:string):string[][] {
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===sep&&!quoted){cells.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;cells.push(cell);if(cells.some(x=>x.trim()))out.push(cells);cells=[];cell='';}else cell+=c;}
  cells.push(cell);if(cells.some(x=>x.trim()))out.push(cells);return out;
 }
+const normalized=(value:string)=>value.replace(/^\uFEFF/,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+function csvColumns(cells:string[]){
+ const head=cells.map(normalized);
+ const date=head.findIndex(x=>/^(data|date|dt)(?:\b|_)/.test(x));
+ const detail=head.findIndex(x=>/^(descricao|description|title|estabelecimento|memo)(?:\b|_)/.test(x));
+ const history=head.findIndex(x=>/^(historico|history|tipo(?: de)? (?:transacao|lancamento)|transaction type)(?:\b|_)/.test(x));
+ const fallback=head.findIndex(x=>/^(historico|history|lancamento)(?:\b|_)/.test(x));
+ const description=detail>=0?detail:fallback;
+ const amount=head.findIndex(x=>/^(valor|amount|value|saida|debito)(?:\b|_)/.test(x));
+ return {date,description,history,amount,debitOnly:amount>=0&&/saida|debito/.test(head[amount])};
+}
+function csvTable(text:string){
+ // Bank exports often put account details and balances before the actual table.
+ // Match the complete table header instead of assuming that the first line is it.
+ for(const separator of [';','\t',',']){
+  const records=splitCSV(text.replace(/^\uFEFF/,''),separator);
+  for(let i=0;i<Math.min(records.length,100);i++){
+   const columns=csvColumns(records[i]);
+   if(columns.date>=0&&columns.description>=0&&columns.amount>=0)return {records:records.slice(i+1),...columns};
+  }
+ }
+ throw new Error('Não conseguimos reconhecer o formato deste extrato. Você pode tentar OFX ou adicionar os gastos manualmente.');
+}
 export function parseStatement(text:string,kind:string,year:number,direction:'negative'|'positive'='negative'):{rows:Draft[];skipped:number} {
  const result:Draft[]=[];let skipped=0;
  if(kind==='ofx'||text.includes('<STMTTRN>')){
   for(const block of text.split(/<STMTTRN>/i).slice(1)){const field=(k:string)=>block.match(new RegExp('<'+k+'>([^<\\r\\n]+)','i'))?.[1]?.trim()||'';const amount=amountCents(field('TRNAMT'));if(amount>=0){skipped++;continue;}const dt=dateValue(field('DTPOSTED'),year);const r=dt&&row(field('MEMO')||field('NAME'),amount,dt);if(r)result.push(r);else skipped++;}
  } else if(kind==='csv'){
-  const first=text.split(/\r?\n/)[0]||'';const sep=first.includes(';')?';':first.includes('\t')?'\t':',';const records=splitCSV(text.replace(/^\uFEFF/,''),sep);if(records.length<2)return {rows:[],skipped:0};
-  const head=records[0].map(x=>x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim());
-  const di=head.findIndex(x=>/^(data|date|dt|data.*compra|data.*lancamento)/.test(x));
-  const ni=head.findIndex(x=>/descricao|description|title|historico|estabelecimento|memo|lancamento/.test(x));
-  const ai=head.findIndex(x=>/^(valor|amount|value|saida|debito|valor.*compra)/.test(x));
-  if(di<0||ni<0||ai<0)throw new Error('O CSV precisa ter colunas de data, descrição e valor. Ex.: data;descrição;valor');
-  const debitOnly=/saida|debito/.test(head[ai]);
-  for(const cells of records.slice(1)){const amount=amountCents(cells[ai]||'');const description=cells[ni]||'';if(((direction==='negative'?amount>=0:amount<0)&&!debitOnly)||/saldo|pagamento.*fatura|rendimento|estorno|recebido|credito em conta/i.test(description)){skipped++;continue;}const dt=dateValue(cells[di]||'',year);const r=dt&&row(description,amount,dt);if(r)result.push(r);else skipped++;}
+  if(!text.trim())return {rows:[],skipped:0};
+  const table=csvTable(text);
+  for(const cells of table.records){
+   const amount=amountCents(cells[table.amount]||'');
+   // Prefer the merchant description when the bank also provides a generic history.
+   const history=table.history>=0?(cells[table.history]||'').trim():'';
+   const description=(cells[table.description]||'').trim()||history;
+   const context=normalized(history+' '+description);
+   const movement=normalized(history);
+   const notExpense=/saldo|pagamento.*fatura|rendimento|estorno|recebido|credito em conta/.test(context)
+    ||/^(aplicacao|resgate)(?:$| (?:automatic[oa]|financeir[oa]|de |em ))/.test(movement);
+   if(((direction==='negative'?amount>=0:amount<0)&&!table.debitOnly)||notExpense){skipped++;continue;}
+   const dt=dateValue(cells[table.date]||'',year);const item=dt&&row(description,amount,dt);
+   if(item)result.push(item);else skipped++;
+  }
  }else{
   for(const line of text.split(/\r?\n/)){const m=line.trim().match(/^(\d{1,2}[\/.]\d{1,2}(?:[\/.]\d{2,4})?|\d{4}-\d{2}-\d{2})\s+(.+?)\s+(?:R\$\s*)?(-?[\d.]+,\d{2})(?:\s*[DC])?\s*$/i);if(!m)continue;const dt=dateValue(m[1],year);if(/saldo|rendimento|recebido|estorno|pagamento.*fatura/i.test(m[2])){skipped++;continue;}const r=dt&&row(m[2],amountCents(m[3]),dt);if(r)result.push(r);}
  }
