@@ -2,8 +2,8 @@ export const categories = ['Alimentação','Transporte','Estudos','Saúde','Comp
 export type Category = typeof categories[number];
 export type Status = 'review'|'approved'|'paid'|'rejected';
 export type Member = {user_id:string; name:string; role:'parent'|'child'; email?:string};
-export type Expense = {id:string; user_id:string; description:string; amount:number; date:string; category:Category; status:Status; note:string; receipt_path?:string|null; receipt_name?:string|null; created_at?:string; review_note?:string|null};
-export type FamilyData = {family:{id:string;name:string;creator_id:string}; me:Member; members:Member[]; expenses:Expense[]};
+export type Expense = {id:string; user_id:string; description:string; merchant?:string; amount:number; date:string; category:Category; status:Status; note:string; receipt_path?:string|null; receipt_name?:string|null; created_at?:string; review_note?:string|null};
+export type FamilyData = {aiReady?:boolean;aiModel?:string|null;family:{id:string;name:string;creator_id:string}; me:Member; members:Member[]; expenses:Expense[]};
 export const statusLabel:Record<Status,string> = {review:'A revisar',approved:'A pagar',paid:'Pago',rejected:'Não aprovado'};
 export const money=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n/100);
 export function categorize(description:string):Category|'' {
