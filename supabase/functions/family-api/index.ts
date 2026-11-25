@@ -15,6 +15,16 @@ function expenseInput(b:any){
  if(!categories.includes(b.category))problem('Escolha uma categoria para cada gasto.');
  return {description,merchant:text(b.merchant||'',100,false),note,date,amount:b.amount,category:b.category,receipt_path:b.receipt_path?text(b.receipt_path,240):null,receipt_name:b.receipt_name?text(b.receipt_name,160):null};
 }
+function emailInput(value:unknown){
+ const email=text(value,254).toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.endsWith('.invalid'))problem('Confira seu e-mail.');
+ return email;
+}
+function passwordInput(value:unknown){if(typeof value!=='string'||value.length<8||value.length>128)problem('Sua senha precisa ter de 8 a 128 caracteres.');return value as string;}
+function sessionReply(result:any){
+ const s=result.data?.session;if(result.error||!s)problem('E-mail ou senha incorretos.',401);
+ const u=s.user;return reply({session:{access_token:s.access_token,refresh_token:s.refresh_token,expires_at:s.expires_at,user:{id:u.id,name:u.user_metadata?.name||'Você',email:u.email}}});
+}
 function safeError(error:any){
  const msg=String(error?.message||'');
  const known:Record<string,string>={ALREADY_JOINED:'Você já faz parte de uma família.',INVALID_INVITE:'O convite não existe, expirou ou já foi usado.',WRONG_EMAIL:'Este convite foi feito para outro e-mail.',FAMILY_FULL:'Esta família atingiu o limite de pessoas.',PARENT_EXISTS:'Sua família já tem um responsável.',FORBIDDEN:'Seu perfil não permite essa ação.',INVALID_RECEIPT:'Não encontramos esse comprovante.'};
@@ -68,25 +78,34 @@ Deno.serve(async(req:Request)=>{
    let result:any;
    if(b.op==='refresh')result=await db.auth.refreshSession({refresh_token:text(b.refresh_token,2048)});
    else{
-    const username=text(b.username,32).toLowerCase();if(!/^[a-z0-9_.-]{3,32}$/.test(username))problem('Use de 3 a 32 letras, números, ponto, hífen ou _.');
-    if(typeof b.password!=='string'||b.password.length<8||b.password.length>128)problem('Sua senha precisa ter de 8 a 128 caracteres.');
-    const email=username+'@mepagamae.invalid';
+    const email=emailInput(b.email),password=passwordInput(b.password);
     if(b.op==='register'){
      await take('signup-global','all',50);
-     const created=await db.auth.admin.createUser({email,password:b.password,email_confirm:true,user_metadata:{name:text(b.name,40),username}});
-     if(created.error)problem('Não foi possível criar a conta. Tente outro usuário ou entre na sua conta.');
+     const created=await db.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{name:text(b.name,40)}});
+     if(created.error)problem('Não foi possível criar a conta. Confira o e-mail ou entre na sua conta.');
     }
-    result=await db.auth.signInWithPassword({email,password:b.password});
+    result=await db.auth.signInWithPassword({email,password});
    }
-   if(result.error||!result.data?.session)problem(b.op==='refresh'?'Sua sessão terminou. Entre novamente.':'Usuário ou senha incorretos.',401);
-   const s=result.data.session,u=s.user;
-   return reply({session:{access_token:s.access_token,refresh_token:s.refresh_token,expires_at:s.expires_at,user:{id:u.id,name:u.user_metadata?.name||'Você',username:u.user_metadata?.username||'',email:u.email}}});
+   if(result.error||!result.data?.session)problem(b.op==='refresh'?'Sua sessão terminou. Entre novamente.':'E-mail ou senha incorretos.',401);
+   return sessionReply(result);
   }
   const token=typeof b.access_token==='string'?b.access_token:'';
   const verified=token?await db.auth.getUser(token):null;
   if(!verified||verified.error||!verified.data.user)return reply({error:'Sua sessão terminou. Entre novamente.'},401);
   const u=verified.data.user,actor={id:u.id,email:u.email||'',name:u.user_metadata?.name||'Você'};
   if(b.op==='logout'){await db.auth.admin.signOut(token,'local');return reply({ok:true})}
+  if(b.op==='upgrade_email'){
+   if(!actor.email.endsWith('@mepagamae.invalid'))problem('Esta conta já usa e-mail para entrar.');
+   await take('email-upgrade',actor.id,10);
+   const email=emailInput(b.email),password=passwordInput(b.password),name=text(b.name,40);
+   const proofClient=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
+   const proof=await proofClient.auth.signInWithPassword({email:actor.email,password});
+   if(proof.error||proof.data.user?.id!==actor.id)problem('Confira sua senha atual.');
+   const changed=await db.auth.admin.updateUserById(actor.id,{email,email_confirm:true,user_metadata:{name,username:null}});
+   if(changed.error)problem('Não foi possível salvar esse e-mail. Confira o endereço ou use outro.');
+   unwrap(await db.from('cec_members').update({email,name}).eq('user_id',actor.id));
+   return sessionReply(await db.auth.signInWithPassword({email,password}));
+  }
   const me=unwrap(await db.from('cec_members').select('*').eq('user_id',actor.id).maybeSingle());
   if(b.op==='data'){
    if(!me)return reply({data:null});
