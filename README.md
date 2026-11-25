@@ -1,38 +1,45 @@
 # MePagaMãe
 
-Family expense submissions and reimbursements, in Brazilian Portuguese. The interface is designed for a parent to review expenses and for children to submit only their own.
+Controle de reembolsos da família. Interface simples para celular: os filhos enviam e a mãe confere, aprova e registra o pagamento.
 
-[Abrir o site](https://conta-em-casa-felipe.pzfs2wxpk4.chatgpt.site) · [Repositório](https://github.com/FeBuen0/MePagaMae)
+## Usar
 
-## Run locally
+1. Crie uma conta com nome, usuário e senha (mínimo de 8 caracteres).
+2. Crie a família como filho ou responsável. Em **Família → Adicionar pessoa**, gere um link e envie para a família.
+3. Cada convidado cria a própria conta. O convite dos filhos aceita até 10 pessoas; o convite do responsável, uma pessoa. Expiram em 7 dias. Há um responsável por família.
+4. Envie CSV, OFX ou PDF com texto selecionável, ou adicione um gasto. Confira valores, datas e categorias antes do envio.
+5. O responsável aprova os gastos. Depois de transferir o dinheiro pelo banco, marca **Já paguei**.
 
-Requires Node.js 22.13 or newer. Run `npm ci`, then `npm run dev`. Use `npm run check` for the currency/import checks and TypeScript, or `npm run build` for a production build. The PDF worker is generated from the locked dependency during development and builds.
+As senhas são gerenciadas pelo Supabase Auth. O usuário é convertido em um identificador interno `usuario@mepagamae.invalid`; não é um e-mail real, não há envio de mensagens e o acesso não exige cadastrar e-mails da família. Recuperação por e-mail ainda não está disponível.
 
-## Current behavior
+## Gemini
 
-- A clearly labeled, in-memory demonstration is available before a family is configured. Demonstration records are never inserted into a real database.
-- Visitors sign in through the Sites platform using their own ChatGPT accounts. The Sites server passes the verified per-site user ID to the backend; clients cannot select a live role.
-- The family creator chooses their own role and generates one-use invitations for others. The parent role is unique per family. Family creation, invite redemption, expense batches and batch payments are atomic database operations.
-- Children can see their own expenses only and can edit/delete only expenses still awaiting review. The parent can review, approve, decline and mark approved expenses paid. No funds are transferred by this app.
-- Values are stored as integer cents. Pending and approved unpaid amounts are shown separately. Export downloads the current filtered view as CSV.
-- CSV and OFX import, plus text-selectable PDFs, are supported. The account/card selector determines which value sign is an expense in CSVs. The import preview requires confirmation and a category for every selected row. Receipts are optional, private, and downloaded through short-lived signed URLs. OCR/AI is not enabled.
+Em **Família → Ativar Gemini**, quem criou a família ou o responsável informa uma chave obtida no Google AI Studio. A chave é testada e guardada no Supabase Vault, criptografada e sem retorno ao navegador. Cada família usa sua própria chave.
 
-## Supabase connection
+**Identificar com Gemini** envia somente as descrições. Sugere o estabelecimento e uma categoria; não altera valores, datas, autoria ou situação. A descrição original é preservada. Sugestões com confiança inferior a 0,8 deixam a categoria para a pessoa escolher. Toda importação exige revisão. PDF escaneado e OCR não estão incluídos.
 
-This project deliberately does not fall back to browser-local records when the database is unavailable. Real submission stays gated until a Supabase project is connected.
+Modelo: `gemini-3.5-flash-lite`, via Interactions API, revisão `2026-05-20`. Limite do aplicativo: 50 chamadas por família por dia, incluindo testes de chave. A API também tem quotas e cobrança próprias da conta Google. O site continua permitindo categorização manual se a API falhar.
 
-1. In a free Supabase project, run `supabase/migrations/202611250001_family.sql` once. Use the SQL editor or the Supabase migration interface. It creates the tables, restricted server RPCs, and the private `cec-receipts` bucket.
-2. Generate a cryptographically random server secret of at least 32 bytes. Keep it out of source control and client code. Configure its SHA-256 hex digest in `APP_SECRET_SHA256` in `supabase/functions/family-api/index.ts`.
-3. Deploy that file to a Supabase Edge Function named `family-api`. It uses built-in `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Disable Supabase JWT verification for this one endpoint: it has its own mandatory high-entropy server-secret authentication and does not accept browser identity. See `supabase/config.toml`.
-4. Set the Sites runtime secrets `SUPABASE_EDGE_URL` to the deployed function URL and `FAMILY_API_SECRET` to the original server secret. Redeploy the Site to apply runtime environment changes.
-5. Sign in, create the family, choose **Enviar meus gastos** for Felipe, and generate an invitation with the parent role for the mother. The other child gets a child-role invitation. No email is sent by the app.
-6. The Site is initially owner-private. Grant the family's accounts access through the Site sharing controls before they can open their invitation links. Application invitations do not change the hosting audience.
+## Executar
 
-RLS is enabled on all application tables, with all direct anon/authenticated access revoked. Database and storage service credentials stay within the Supabase function. Its mandatory server-secret check authenticates the Sites backend. Every action then checks verified family membership and role before reading or writing records.
+```sh
+npm ci
+npm run dev
+npm run check
+npm run build
+```
 
-## Verification
+O worker PDF é copiado da versão fixada de `pdfjs-dist` durante dev/build. Arquivos e pastas de build, ambiente e dependências não devem ser publicados no GitHub.
 
-- `node scripts/check-behavior.mjs` tests currency parsing, category rules, dates, CSV account/card sign conventions, credit/refund exclusion, quoted CSV records, OFX, and text-extracted statement lines.
-- `npx tsc --noEmit` validates the Site source. Supabase/Deno source is separately deployed and excluded from the Site TypeScript project.
-- Build through the Sites `build-site.mjs` helper.
-- Browser QA covered the parent and child screens, a 390px mobile viewport, manual submissions, auto categorization, and review/approval balance changes in demonstration mode. Browser file upload was blocked by permissions; the full file chooser/PDF worker flow and live Supabase operations still require validation after connection.
+## Configuração do servidor
+
+1. Aplique as migrações de `supabase/migrations` em ordem. Elas configuram tabelas, permissões, convites, pagamentos, Vault e limites.
+2. Gere um segredo aleatório de pelo menos 32 bytes. Guarde o valor somente no segredo de produção `FAMILY_API_SECRET`. Configure seu SHA-256 no `APP_SECRET_SHA256` da função.
+3. Publique `supabase/functions/family-api/index.ts` como `family-api`. `verify_jwt=false` desliga a verificação legada do gateway; o código exige o segredo do servidor e valida o JWT real do usuário com `auth.getUser` em todas as operações protegidas.
+4. Configure `SUPABASE_EDGE_URL=https://PROJECT.supabase.co/functions/v1/family-api` e `FAMILY_API_SECRET` no ambiente de produção. Nunca publique o segredo ou a service role key no código.
+5. Para provisionar uma chave já guardada no servidor, configure os segredos `GEMINI_API_KEY` e `GEMINI_FAMILY_ID` com o UUID exato da família do dono. No próximo carregamento por quem criou a família ou pelo responsável, ela é movida para o Vault. Remova esses dois segredos após concluir. Sem um UUID configurado, nenhuma família pode usar a chave do dono.
+6. Publique o frontend. A página de entrada deve ser acessível aos convidados. Os dados permanecem privados: todo acesso passa pela API autenticada, com verificação de família e perfil no servidor. `/api/health` retorna somente o estado da conexão.
+
+Tabelas e funções não dão acesso direto a `anon` ou `authenticated`. O bucket `cec-receipts` é privado; comprovantes só são disponibilizados temporariamente ao dono ou responsável da mesma família. A API protege o cadastro/login por limite de tentativas, usa valores inteiros em centavos e evita submissões e pagamentos repetidos. Não há pagamentos bancários automáticos.
+
+O repositório GitHub e a hospedagem Sites têm fluxos de publicação separados; alterações no GitHub não publicam automaticamente o site.
