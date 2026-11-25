@@ -4,13 +4,15 @@ Controle de reembolsos da família. Interface simples para celular: os filhos en
 
 ## Usar
 
-1. Crie uma conta com nome, usuário e senha (mínimo de 8 caracteres).
+1. Crie uma conta com nome, e-mail e senha (mínimo de 8 caracteres).
 2. Crie a família como filho ou responsável. Em **Família → Adicionar pessoa**, gere um link e envie para a família.
 3. Cada convidado cria a própria conta. O convite dos filhos aceita até 10 pessoas; o convite do responsável, uma pessoa. Expiram em 7 dias. Há um responsável por família.
 4. Envie CSV, OFX ou PDF com texto selecionável, ou adicione um gasto. Confira valores, datas e categorias antes do envio.
 5. O responsável aprova os gastos. Depois de transferir o dinheiro pelo banco, marca **Já paguei**.
 
-As senhas são gerenciadas pelo Supabase Auth. O usuário é convertido em um identificador interno `usuario@mepagamae.invalid`; não é um e-mail real, não há envio de mensagens e o acesso não exige cadastrar e-mails da família. Recuperação por e-mail ainda não está disponível.
+As senhas são gerenciadas pelo Supabase Auth. O nome identifica a pessoa para a família e o e-mail é usado para entrar. O cadastro é imediato, sem envio de confirmação por e-mail. O acesso aos gastos depende da conta autenticada e da participação na família, não do domínio ou da verificação do endereço. Recuperação por e-mail ainda não está disponível.
+
+Contas antigas com identificador interno podem adicionar um e-mail usando a sessão existente e a senha atual. A atualização mantém o mesmo ID, a família e todos os gastos. Sem uma sessão antiga válida, o cadastro novo é separado; não transfira dados apenas por coincidência de nomes.
 
 ## Gemini
 
